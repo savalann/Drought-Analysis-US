@@ -1,1 +1,1 @@
-from pydat.pydat_module import pydat
+import station_statics
