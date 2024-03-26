@@ -357,6 +357,8 @@ cython_debug/
 00.temp/*
 03.outputs/*
 prograss_report.py
+01.scripts/.idea/
+
 
 
 
