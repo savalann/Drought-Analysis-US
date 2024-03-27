@@ -62,7 +62,7 @@ input_path = path_01.replace('01.scripts', '03.outputs/')  # savvy: Set the path
 
 # %% savvy: Seasonal function
 
-def sdf_seasonal(data):
+def seasonal_severity(data):
     quarterly_average = data.resample('Q').mean()
     quarterly_average['season'] = quarterly_average.index.quarter
 
@@ -80,6 +80,28 @@ def sdf_seasonal(data):
     threshold_all = threshold
 
     return severity_all, threshold_all
+
+
+def seasonal_sdf(data):
+    season_list = [ii for ii in range(1, 5)]
+    final_data = {}
+    for duration_num in duration_list:
+        final_data[duration_num] = {}
+        temp_data_01 = data[data['season'] == 1]
+        temp_data_02 = temp_data_01.rolling(window=duration_num).mean().dropna()
+        temp_data_02 = temp_data_02.reset_index()
+        temp_data_02['year'] = temp_data_02.Datetime.dt.year
+        temp_data_02 = temp_data_02[['year', 'USGS_flow']]
+        for season_num in season_list[1:]:
+            temp_data_01 = data[data['season'] == season_num]
+            temp_data_01 = temp_data_01.rolling(window=duration_num).mean().dropna()
+            temp_data_01 = temp_data_01.reset_index()
+            temp_data_01['year'] = temp_data_01.Datetime.dt.year
+            temp_data_02 = pd.merge(temp_data_02, temp_data_01[['USGS_flow', 'year']], on='year',
+                                    suffixes=(f'_{season_num - 1}', f'_{season_num}')).dropna()
+        final_data[duration_num] = temp_data_02
+
+    return final_data
 
 
 # %%
@@ -115,7 +137,7 @@ for station_index in range(len(dataset_raw)):
                                                       (temp_df_01.Datetime < f'{end_year + 1}-11-01')]
             data_station_raw['upstream'].set_index('Datetime', inplace=True)
             drought_data['upstream'][dataset_raw.iloc[station_index]['Reservoir']] = (
-                sdf_seasonal(data=data_station_raw['upstream'].iloc[:, :1]))[0]
+                seasonal_sdf(data=data_station_raw['upstream'].iloc[:, :1]))[0]
         else:
             station_downstream = dataset_raw.iloc[station_index]['Downstream Station']
             temp_df_03 = pd.read_csv(f'{input_path}usgs_data/{station_downstream}.csv')
@@ -124,7 +146,7 @@ for station_index in range(len(dataset_raw)):
                                                         (temp_df_03.Datetime < f'{end_year + 1}-11-01')]
             data_station_raw['downstream'].set_index('Datetime', inplace=True)
             drought_data['downstream'][dataset_raw.iloc[station_index]['Reservoir']] = (
-                sdf_seasonal(data=data_station_raw['downstream'].iloc[:, :1]))[0]
+                seasonal_sdf(data=data_station_raw['downstream'].iloc[:, :1]))[0]
 
 
 # %% Drought data comparison analysis function
@@ -226,24 +248,3 @@ for station_index in range(len(dataset_raw)):
 # %%
 
 
-season_list = [ii for ii in range(1, 5)]
-
-data = drought_data['downstream'][dataset_raw.iloc[station_index]['Reservoir']]
-
-
-final_data = {}
-
-for duration_num in duration_list:
-    final_data[duration_num] = {}
-    temp_data_01 = data[data['season'] == 1]
-    temp_data_02 = temp_data_01.rolling(window=duration_num).mean().dropna()
-    temp_data_02 = temp_data_02.reset_index()
-    temp_data_02['year'] = temp_data_02.Datetime.dt.year
-    temp_data_02 = temp_data_02[['year', 'USGS_flow']]
-    for season_num in season_list[1:]:
-        temp_data_01 = data[data['season'] == season_num]
-        temp_data_01 = temp_data_01.rolling(window=duration_num).mean().dropna()
-        temp_data_01 = temp_data_01.reset_index()
-        temp_data_01['year'] = temp_data_01.Datetime.dt.year
-        temp_data_02 = pd.merge(temp_data_02, temp_data_01[['USGS_flow', 'year']], on='year', suffixes=(f'_{season_num-1}', f'_{season_num}')).dropna()
-    final_data[duration_num] = temp_data_02
