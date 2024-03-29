@@ -39,26 +39,31 @@ This software is licensed under the Apache License 2.0. See the LICENSE file for
 # savvy: basic packages.
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
+# savvy: statistical packages
 from scipy.stats import spearmanr, kendalltau
 import pymannkendall as mk
 
 # savvy: system packages.
+import math
 import warnings
-
+import os
 warnings.filterwarnings("ignore")
 
 # savvy: my packages.
 from pyndat import Pyndat
 
 # %% savvy: Drought data generation function.
-
+path_01 = os.getcwd()  # savvy: Get the current working directory
+input_path_general = path_01.replace('01.scripts', '02.inputs/')  # savvy: set the path for input data.
+input_path = path_01.replace('01.scripts', '03.outputs/')  # savvy: Set the path for output data.
 # Temp variables - Inputs.
-input_path = ('E:/OneDrive/OneDrive - The University of Alabama/02.projects/02.nidis/02.code/Drought-Analysis-US'
-              '/03.outputs/')
+
 station_upstream = None
 station_downstream = None
 duration_list = [ii for ii in range(2, 11)]
-dataset_raw = pd.read_csv(f'{input_path}storage.csv', dtype='object')
+dataset_raw = pd.read_csv(f'{input_path_general}storage.csv', dtype='object')
 end_year = 2020
 data_length = 41
 start_year = end_year - data_length + 1
@@ -183,7 +188,154 @@ final_p_correlation = pd.concat([dataset_raw, p_correlation_text], axis=1)
 
 # # final_drought_number.to_csv(f'{path_01}number_of_drought_events.csv')
 # # final_drought_descriptive.to_csv(f'{path_01}descriptive_info.csv')
-# # final_p_trend.to_csv(f'{path_01}trend_p_value.csv')
-# # final_slope_trend.to_csv(f'{path_01}trend_slope.csv')
+final_p_trend.to_csv(f'{input_path}annual_trend_p_value.csv')
+final_slope_trend.to_csv(f'{input_path}annual_trend_slope.csv')
 # # final_score_correlation.to_csv(f'{path_01}correlation_score.csv')
 # # final_p_correlation.to_csv(f'{path_01}correlation_p_value.csv')
+
+# %%
+
+
+
+def create_line_plot(datasets, save_path, figsize=(12, 12)):
+    n_subplots = len(datasets)
+    n_cols = int(math.ceil(math.sqrt(n_subplots)))
+    n_rows = int(math.ceil(n_subplots / n_cols))
+    key_name = list(datasets.keys())
+    # Using sharey=True and sharex=True
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, sharey=True, sharex=True, dpi=300)
+    axes = axes.flatten()  # Flatten the axes array for easy iteration
+
+    for i, ax in enumerate(axes):
+        if i < n_subplots:
+            # Plotting the data with labels for the legend
+            # Setting the positions and width for the bars
+            positions = np.arange(1, len(datasets[key_name[i]])+1)  # Row numbers
+            width = 0.35  # The width of the bars
+
+            # Plotting the bars for each dataset
+            ax.bar(positions, datasets[key_name[i]].iloc[:, 2], width, label='Downstream')
+            ax.bar(positions, datasets[key_name[i]].iloc[:, 1], width, label='Upstream')
+
+
+            ax.set_title(f'{datasets[key_name[i]].iloc[0, -1]} ({datasets[key_name[i]].iloc[0, -2]})')
+            ax.legend()
+            # Setting the x-axis label for the last row
+            if i // n_cols == n_rows - 1:
+                ax.set_xlabel('Year')
+
+            # Setting the y-axis label for the first column
+            if i % n_cols == 0:
+                ax.set_ylabel('Severity(%)')
+        else:
+            # Hide unused subplots
+            ax.axis('off')
+
+    plt.tight_layout()
+    plt.savefig(f'{save_path}bar_annual_severity.png')
+    plt.show()
+
+#%%
+import numpy as np
+from scipy import stats
+
+def statisical_test(datasets):
+    # Sample data - replace these with your actual datasets
+    data1 = datasets.iloc[:, 1]
+    data2 = datasets.iloc[:, 2]
+
+    # Calculate the differences
+    differences = data2 - data1
+
+    # Normality test on the differences
+    stat, p_value = stats.shapiro(differences)
+    print('Shapiro-Wilk Test: stat=%.3f, p=%.3f' % (stat, p_value))
+
+    # Check if differences are normally distributed
+    # if p_value > 0.05:
+    #     print("Differences are normally distributed, performing paired t-test.")
+    #     # Perform paired t-test
+    #     t_stat, p_val = stats.ttest_rel(data1, data2)
+    #     print('Paired t-test: t=%.3f, p=%.3f' % (t_stat, p_val))
+    # else:
+    print("Differences are not normally distributed, performing Wilcoxon signed-rank test.")
+    # Perform Wilcoxon signed-rank test
+    w_stat, p_val = stats.wilcoxon(data1, data2)
+    print('Wilcoxon signed-rank test: W=%.3f, p=%.3f' % (w_stat, p_val))
+
+
+#%%
+
+
+temp_data_merged = {}
+
+for duration_number in [2]:
+    for reservoir_number in range(len(dataset_raw)):
+        temp_data_upstream = drought_data['upstream'][dataset_raw.iloc[reservoir_number]['Reservoir']]
+        temp_data_upstream = temp_data_upstream[f'Duration={duration_number}'][['Date', 'Severity(%)']]
+        temp_data_downstream = drought_data['downstream'][dataset_raw.iloc[reservoir_number]['Reservoir']]
+        temp_data_downstream = temp_data_downstream[f'Duration={duration_number}'][['Date', 'Severity(%)']]
+        temp_data_merged_01 = pd.merge(temp_data_upstream, temp_data_downstream, on='Date',
+                                       suffixes=('_upstream', '_downstream'))
+        print(duration_number, reservoir_number, '=======================')
+        statisical_test(temp_data_merged_01.dropna())
+        temp_data_merged_01['Capacity'] = dataset_raw.iloc[reservoir_number]['Capacity']
+        temp_data_merged_01['Reservoir'] = dataset_raw.iloc[reservoir_number]['Reservoir']
+        temp_data_merged[dataset_raw.iloc[reservoir_number]['Reservoir']] = temp_data_merged_01
+
+    # create_line_plot(temp_data_merged, f'{input_path}d{duration_number}_')
+
+
+
+#%%
+#
+# def create_scatter_plot(datasets, save_path, figsize=(12, 12)):
+#     n_subplots = len(datasets)
+#     n_cols = int(math.ceil(math.sqrt(n_subplots)))
+#     n_rows = int(math.ceil(n_subplots / n_cols))
+#     key_name = list(datasets.keys())
+#     # Using sharey=True and sharex=True
+#     fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize, sharey=True, sharex=True, dpi=300)
+#     axes = axes.flatten()  # Flatten the axes array for easy iteration
+#
+#     for i, ax in enumerate(axes):
+#         if i < n_subplots:
+#             # Plotting the data with labels for the legend
+#             # Setting the positions and width for the bars
+#             positions = np.arange(1, len(datasets[key_name[i]])+1)  # Row numbers
+#             width = 0.35  # The width of the bars
+#
+#             # Plotting the bars for each dataset
+#             ax.scatter(datasets[key_name[i]].iloc[:, 2], datasets[key_name[i]].iloc[:, 3])
+#             ax.plot([10, 30], [10, 30], 'k--')  # This plots the diagonal line
+#
+#             ax.set_title(f'Duration = {i+2}')
+#             # Setting the x-axis label for the last row
+#             if i // n_cols == n_rows - 1:
+#                 ax.set_xlabel('Upstream Drought Number')
+#
+#             # Setting the y-axis label for the first column
+#             if i % n_cols == 0:
+#                 ax.set_ylabel('Downstream Drought Number')
+#         else:
+#             # Hide unused subplots
+#             ax.axis('off')
+#
+#     plt.tight_layout()
+#     plt.savefig(f'{save_path}scatter_annual_drought_number.png')
+#     plt.show()
+#
+# temp_data_plot = {}
+# for duration_number in duration_list:
+#
+#     temp_data_plot[duration_number] = final_drought_number[['Reservoir', 'Capacity', f'D{duration_number}_Upstream', f'D{duration_number}_Downstream']]
+#
+# create_scatter_plot(temp_data_plot, f'{input_path}d{2}_')
+#
+#
+#
+#
+#
+#
+#
+#
